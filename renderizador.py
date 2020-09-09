@@ -7,20 +7,102 @@ import x3d          # Faz a leitura do arquivo X3D, gera o grafo de cena e faz t
 import interface    # Janela de visualização baseada no Matplotlib
 import gpu          # Simula os recursos de uma GPU
 
+def convert_rgb(color):
+  return [round(255*n) for n in color]
+
+def line(x, y, x0, y0, x1, y1):
+    """
+    x,y - ponto sendo checado se esta dentro ou fora da linha
+    x0, y0, x1 ,y0 - coordenadas dos dois vertices da linha
+    """
+
+    dx = x1 - x0
+    dy = y1 - y0
+        
+    if ((x - x0)*dy - (y - y0)*dx) > 0:
+        return True
+    else:
+        return False
+
+def inside(x, y, vertices):
+
+    x0 = vertices[0]
+    y0 = vertices[1]
+    x1 = vertices[2]
+    y1 = vertices[3]
+    x2 = vertices[4]
+    y2 = vertices[5]
+
+    line1 = line(x ,y, x0, y0, x1, y1)
+    line2 = line(x ,y, x1, y1, x2, y2)
+    line3 = line(x ,y, x2, y2, x0, y0)
+
+    return line1 and line2 and line3
+
 def polypoint2D(point, color):
     """ Função usada para renderizar Polypoint2D. """
-    gpu.GPU.set_pixel(3, 1, 255, 0, 0) # altera um pixel da imagem
-    # cuidado com as cores, o X3D especifica de (0,1) e o Framebuffer de (0,255)
+
+    rgb_color = convert_rgb(color)
+
+    for i in range(0, len(point), 2):
+        gpu.GPU.set_pixel(int(point[i]), int(point[i+1]), rgb_color[0], rgb_color[1], rgb_color[2])
 
 def polyline2D(lineSegments, color):
     """ Função usada para renderizar Polyline2D. """
-    x = gpu.GPU.width//2
-    y = gpu.GPU.height//2
-    gpu.GPU.set_pixel(x, y, 255, 0, 0) # altera um pixel da imagem
+    
+    rgb_color = convert_rgb(color)
+    
+    # vertices da linha
+    x0 = lineSegments[0]
+    y0 = lineSegments[1]
+    x1 = lineSegments[2]
+    y1 = lineSegments[3]
+
+    # calcula a diferença entre os vertices nos eixos x e y
+    dx = x1 - x0
+    dy = y1 - y0
+
+    #  calcula o numero de pixels necessarios pra fazer a linha
+    n_pixels = round(abs(dx) if abs(dx) > abs(dy) else abs(dy))
+
+    # calcula o quanto é necessário incrementar em x e y para cada novo pixel
+    Xinc = dx / n_pixels
+    Yinc = dy / n_pixels
+
+    # calcula os valores de x e y para cada pixel e adiciona na lista
+    X = x0
+    Y = y0
+    pixels = []
+    for i in range(int(n_pixels)+1):
+        pixels.append((X,Y))
+        X += Xinc
+        Y += Yinc
+
+    for x,y in pixels:
+        gpu.GPU.set_pixel(int(x), int(y), rgb_color[0], rgb_color[1], rgb_color[2])
 
 def triangleSet2D(vertices, color):
     """ Função usada para renderizar TriangleSet2D. """
-    gpu.GPU.set_pixel(24, 8, 255, 255, 0) # altera um pixel da imagem
+
+    rgb_color = convert_rgb(color)
+
+    # itera por todos os pixels do grid
+    for x in range(LARGURA):
+        for y in range(ALTURA):
+            super_sample = [
+                inside(x+0.33, y+0.33, vertices),
+                inside(x+0.33, y+0.66, vertices),
+                inside(x+0.66, y+0.33, vertices),
+                inside(x+0.66, y+0.66, vertices),
+            ]
+            percent = 0
+
+            for sample in super_sample:
+                if sample:
+                  percent += 0.25
+
+            if percent:
+                gpu.GPU.set_pixel(x, y, rgb_color[0]*percent, rgb_color[1]*percent, rgb_color[2]*percent)
 
 LARGURA = 30
 ALTURA = 20
